@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using System.Data;
 
 namespace csvManager
 {
@@ -13,7 +14,20 @@ namespace csvManager
         /// <summary>
         /// ファイル名
         /// </summary>
-        private string FileName;
+        private string F_FileName;
+        /// <summary>
+        /// 現在グリッドに表示されているDataTable
+        /// </summary>
+        private DataTable CurrentData { get; }
+
+        /// <summary>
+        /// データテーブル(GridDataViewと紐付ける)
+        /// </summary>
+        public DataTable DataTableForGrid { get; set; }
+        /// <summary>
+        /// UndoRedo用記録データプロパティ
+        /// </summary>
+        public RecordedDataTables RecordedData { get; set; }
         /// <summary>
         /// CSVデータプロパティ
         /// </summary>
@@ -24,8 +38,9 @@ namespace csvManager
         /// </summary>
         public Control()
         {
-            CSVAllData = new CSVAllData();
-            FileName = string.Empty;
+            this.CSVAllData = new CSVAllData();
+            F_FileName = string.Empty;
+            RecordedData = new RecordedDataTables();
         }
         #endregion
 
@@ -159,7 +174,7 @@ namespace csvManager
             {
                 //フォーカスを外して、値を確定
                 gridView.CurrentCell = null;
-                UndoControl.Command.Redo();
+                //UndoControl.Command.Redo();
             }
         }
 
@@ -191,6 +206,30 @@ namespace csvManager
         }
 
         /// <summary>
+        /// 現在のグリッドデータを記録する
+        /// </summary>
+        /// <param name="sender"></param>
+        public void RecodeGridData(object sender)
+        {
+            DataGridView gridView = sender as DataGridView;
+            if (gridView != null)
+            {
+                //記録する(Action..最新DataTable更新、Undo..最新データである最後尾を削除)
+                UndoControl.Command.Record(
+                    () => { RecordedData.Add(this.DataTableForGrid);
+                        gridView.DataSource = RecordedData[RecordedData.Count - 1];
+                    },
+                    () => { RecordedData.RemoveAt(RecordedData.Count - 1);
+                        if(RecordedData.Count > 0)
+                        {
+                            gridView.DataSource = RecordedData[RecordedData.Count - 1];
+                        }
+                    });
+                
+            }
+        }
+
+        /// <summary>
         /// ファイルがロックされているか
         /// </summary>
         /// <returns>true:されている</returns>
@@ -199,9 +238,9 @@ namespace csvManager
             bool result = false;
             try
             {
-                if (File.Exists(this.FileName))
+                if (File.Exists(this.F_FileName))
                 {
-                    using (FileStream fs = new FileStream(this.FileName, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+                    using (FileStream fs = new FileStream(this.F_FileName, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
                 }
             }
             catch (IOException)
@@ -215,7 +254,7 @@ namespace csvManager
         /// </summary>
         public void InputFile(string fileName)
         {
-            this.FileName = fileName;
+            this.F_FileName = fileName;
             this.Read();
         }
 
@@ -224,29 +263,26 @@ namespace csvManager
         /// </summary>
         private void Read()
         {
-            if (File.Exists(this.FileName))
+            if (IsAccessFile())
             {
-                if (!this.IsLockFile())
+                using (FileStream fs = new FileStream(this.F_FileName, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                //using (StreamReader sr = new StreamReader(fs, new UTF8Encoding(false)))//BOMなし
+                using (StreamReader sr = new StreamReader(fs, Encoding.GetEncoding("Shift_JIS")))
                 {
-                    using (FileStream fs = new FileStream(this.FileName, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                    //using (StreamReader sr = new StreamReader(fs, new UTF8Encoding(false)))//BOMなし
-                    using (StreamReader sr = new StreamReader(fs, Encoding.GetEncoding("Shift_JIS")))
+                    int maxVal = 0;
+                    while (sr.Peek() >= 0)
                     {
-                        int maxVal = 0;
-                        while (sr.Peek() >= 0)
-                        {
-                            string lineStr = sr.ReadLine();
-                            if (string.IsNullOrEmpty(lineStr)) continue;//改行などはとばす
+                        string lineStr = sr.ReadLine();
+                        if (string.IsNullOrEmpty(lineStr)) continue;//改行などはとばす
 
-                            CSVColumnData itemsList = new CSVColumnData();
-                            itemsList.MakeListBy(lineStr);
-                            this.CSVAllData.Add(itemsList);  //一行分を追加
+                        CSVColumnData itemsList = new CSVColumnData();
+                        itemsList.MakeListBy(lineStr);
+                        this.CSVAllData.Add(itemsList);  //一行分を追加
 
-                            //一番多いカラム数を設定
-                            if (maxVal < itemsList.Count) maxVal = itemsList.Count;
-                        }
-                        CSVAllData.MaxColumnsInAllRows = maxVal;
+                        //一番多いカラム数を設定
+                        if (maxVal < itemsList.Count) maxVal = itemsList.Count;
                     }
+                    this.CSVAllData.MaxColumnsInAllRows = maxVal;
                 }
             }
         }
@@ -266,25 +302,35 @@ namespace csvManager
         private bool Write()
         {
             bool result = false;
-            if (File.Exists(this.FileName))
+            if(IsAccessFile())
             {
-                if (!this.IsLockFile())
+                //Create：上書きさせるようにする
+                using (FileStream fs = new FileStream(this.F_FileName, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+                //using (StreamWriter sw = new StreamWriter(fs, new UTF8Encoding(false)))//BOMなし
+                using (StreamWriter sw = new StreamWriter(fs, Encoding.GetEncoding("Shift_JIS")))
                 {
-                    //Create：上書きさせるようにする
-                    using (FileStream fs = new FileStream(this.FileName, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
-                    //using (StreamWriter sw = new StreamWriter(fs, new UTF8Encoding(false)))//BOMなし
-                    using (StreamWriter sw = new StreamWriter(fs, Encoding.GetEncoding("Shift_JIS")))
+                    foreach (CSVColumnData lineData in this.CSVAllData)
                     {
-                        foreach (CSVColumnData lineData in this.CSVAllData)
-                        {
-                            string oneLine = lineData.MakeLineByThisDatas();
-                            sw.WriteLine(oneLine);
-                        }
-                        sw.Flush();
+                        string oneLine = lineData.MakeLineByThisDatas();
+                        sw.WriteLine(oneLine);
                     }
-                    result = true;
+                    sw.Flush();
                 }
+                result = true;
             }
+            return result;
+        }
+
+        /// <summary>
+        /// ファイルにアクセス可能か？
+        /// </summary>
+        /// <returns>アクセス可：true</returns>
+        private bool IsAccessFile()
+        {
+            bool result = true;
+            if (!File.Exists(this.F_FileName)) result = false;
+            if (this.IsLockFile()) result = false;
+
             return result;
         }
         #endregion

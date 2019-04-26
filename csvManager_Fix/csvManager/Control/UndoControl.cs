@@ -9,7 +9,7 @@ namespace csvManager
 {
     class UndoControl
     {
-        #region 変数・コンストラクタ
+        #region デリゲート・変数・コンストラクタ
 
         /// <summary>
         /// デリゲート
@@ -19,7 +19,6 @@ namespace csvManager
         /// すべての状態
         /// </summary>
         private static List<State> States = new List<State>();
-
         private static object Lock = new object();
 
         /// <summary>

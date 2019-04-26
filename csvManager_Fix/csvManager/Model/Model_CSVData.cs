@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Text;
+using System.Data;
 
 namespace csvManager
 {
@@ -48,6 +49,28 @@ namespace csvManager
         public void MakeListBy(string line)
         {
             this.AddRange(line.Split(comma));
+        }
+    }
+    #endregion
+
+    #region UndoRedo用記録データ
+    public class RecordedDataTables : List<DataTable>
+    {
+        private new const int Capacity = 3;
+
+        public new void Add(DataTable d)
+        {
+            if(this.Count >= Capacity)
+            {
+                //0番目にあるデータを削除し、前につめた後、最後尾にデータを追加
+                //最後尾が最新データとなる
+                base.RemoveAt(0);
+                for(int i = 0; i < this.Count; i++)
+                {
+                    this[i] = this[i + 1];
+                }
+            }
+            base.Add(d);
         }
     }
     #endregion

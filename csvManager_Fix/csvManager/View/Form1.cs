@@ -6,16 +6,16 @@ namespace csvManager
 {
     public partial class Form1 : Form
     {
-        #region 変数・コンストラクタ
+        #region 変数・プロパティ・コンストラクタ
 
         /// <summary>
         /// コントローラ
         /// </summary>
         private Control F_Control;
-        /// <summary>
-        /// データテーブル(GridDataViewと紐付ける)
-        /// </summary>
-        private DataTable DataTableForGrid { get; set; }
+        ///// <summary>
+        ///// データテーブル(GridDataViewと紐付ける)
+        ///// </summary>
+        //public DataTable DataTableForGrid { get; set; }
 
         /// <summary>
         /// コンストラクタ
@@ -78,22 +78,32 @@ namespace csvManager
         {
             F_Control.KeyDown(sender, e);
         }
+        #endregion
 
+        #region メソッド　表示用
         /// <summary>
         /// Gridへ表示
         /// DataGridViewのDataSourceに紐付けると表示可能
         /// </summary>
         private void Display()
         {
-            this.SetColumnIndex(this.F_Control.CSVAllData.MaxColumnsInAllRows); //カラム設定
+            CSVAllData allData = F_Control.CSVAllData;
+            //カラム設定
+            this.SetColumnIndex(allData.MaxColumnsInAllRows);
 
-            //行をインサート
-            foreach (CSVColumnData lineData in this.F_Control.CSVAllData)
+            //レコード追加
+            foreach (CSVColumnData lineData in allData)
             {
                 string[] rowData = lineData.ToArray();
-                DataTableForGrid.Rows.Add(rowData);
+                F_Control.DataTableForGrid.Rows.Add(rowData);
             }
-            dataGridView1.DataSource = DataTableForGrid;
+
+            //DataSourceへ設定
+            //表示したDataTableを記録し、最新データをDataSourceに登録
+            RecordedDataTables rcdData = F_Control.RecordedData;
+
+            rcdData.Add(F_Control.DataTableForGrid);
+            dataGridView1.DataSource = rcdData[rcdData.Count - 1];
         }
 
         /// <summary>
@@ -102,10 +112,10 @@ namespace csvManager
         /// <param name="cnt"></param>
         private void SetColumnIndex(int cnt)
         {
-            this.DataTableForGrid = new DataTable();
+            F_Control.DataTableForGrid = new DataTable();
             for (int i = 1; i <= cnt; i++)
             {
-                this.DataTableForGrid.Columns.Add(i.ToString());
+                F_Control.DataTableForGrid.Columns.Add(i.ToString());
             }
         }
 
@@ -117,24 +127,24 @@ namespace csvManager
         /// <param name="dataGridView"></param>
         private void MakeAllData(DataGridView dataGridView)
         {
-            if (this.DataTableForGrid != null)
+            if (F_Control.DataTableForGrid != null)
             {
-                this.F_Control.CSVAllData = new CSVAllData();
-                foreach (DataRow row in this.DataTableForGrid.Rows)
+                F_Control.CSVAllData = new CSVAllData();
+                foreach (DataRow row in F_Control.DataTableForGrid.Rows)
                 {
-                    this.F_Control.CSVAllData.Add(this.MakeCSVColumnData(row));
+                    F_Control.CSVAllData.Add(this.MakeCSVColumnData(row));
                 }
             }
         }
         /// <summary>
         /// </summary>
-        /// 1行分のグリッドに入っている文字列を取得しCSVColumnDataオブジェクト作成
+        /// 1行分のグリッドに入っている文字列を取得し、CSVColumnDataオブジェクト作成
         /// <returns></returns>
         private CSVColumnData MakeCSVColumnData(DataRow row)
         {
             CSVColumnData csvData = new CSVColumnData();
             //columnには列インデックスが入っている
-            foreach (DataColumn column in DataTableForGrid.Columns)
+            foreach (DataColumn column in F_Control.DataTableForGrid.Columns)
             {
                 string cellVal = row[column] == null ? string.Empty : row[column].ToString();
                 csvData.Add(cellVal);
@@ -147,8 +157,7 @@ namespace csvManager
         //以下のイベント.......編集中でなくなったら入力操作があった場合走る
         private void dataGridView1_CellParsing(object sender, DataGridViewCellParsingEventArgs e)
         {
-            //保存
-            UndoControl.Command.Record(() => {  }, () => {  });
+            F_Control.RecodeGridData(sender);
         }
         #endregion
     }
