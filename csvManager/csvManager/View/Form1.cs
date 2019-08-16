@@ -12,10 +12,6 @@ namespace csvManager
         /// コントローラ
         /// </summary>
         private Control F_Control;
-        ///// <summary>
-        ///// データテーブル(GridDataViewと紐付ける)
-        ///// </summary>
-        //public DataTable DataTableForGrid { get; set; }
 
         /// <summary>
         /// コンストラクタ
@@ -58,8 +54,8 @@ namespace csvManager
             dialog.Filter = "CSVファイル(*.csv)|*.csv";
             if (dialog.ShowDialog() == DialogResult.OK)
             {
-                F_Control.InputFile(dialog.FileName);
-                this.Display();
+                var csvData = F_Control.InputFile(dialog.FileName);
+                this.LoadData(csvData);
             }
         }
         /// <summary>
@@ -70,10 +66,16 @@ namespace csvManager
             //以下のようにNullにすると、セルからフォーカスがはずれ編集中の値が確定する
             this.dataGridView1.CurrentCell = null;
 
-            this.MakeAllData(this.dataGridView1);
-            if (F_Control.OutputFile()) MessageBox.Show("保存しました。");
+            var dataTable = this.dataGridView1.DataSource as DataTable;
+            var csvData = this.GetAllData(dataTable);
+            if (F_Control.OutputFile(csvData)) MessageBox.Show("保存しました。");
         }
 
+        /// <summary>
+        /// キー押下
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void dataGridView1_KeyDown(object sender, KeyEventArgs e)
         {
             F_Control.KeyDown(sender, e);
@@ -82,40 +84,37 @@ namespace csvManager
 
         #region メソッド　表示用
         /// <summary>
-        /// Gridへ表示
-        /// DataGridViewのDataSourceに紐付けると表示可能
+        /// グリッドデータをロード
         /// </summary>
-        private void Display()
+        private void LoadData(CSVAllData csvData)
         {
-            CSVAllData allData = F_Control.CSVAllData;
+            var table = new DataTable();
+
             //カラム設定
-            this.SetColumnIndex(allData.MaxColumnsInAllRows);
+            this.SetColumnIndex(csvData.MaxColumnsInAllRows, table);
 
             //レコード追加
-            foreach (CSVColumnData lineData in allData)
+            foreach (CSVColumnData lineData in csvData)
             {
                 string[] rowData = lineData.ToArray();
-                F_Control.DataTableForGrid.Rows.Add(rowData);
+                table.Rows.Add(rowData);
             }
 
-            //DataSourceへ設定
-            //表示したDataTableを記録し、最新データをDataSourceに登録
-            RecordedDataTables rcdData = F_Control.RecordedData;
-
-            rcdData.Add(F_Control.DataTableForGrid);
-            dataGridView1.DataSource = rcdData[rcdData.Count - 1];
+            this.dataGridView1.DataSource = table;
+            F_Control.SetViewMemento(this.dataGridView1);
         }
 
         /// <summary>
         /// カラム設定、数値を入れる
         /// </summary>
         /// <param name="cnt"></param>
-        private void SetColumnIndex(int cnt)
+        private void SetColumnIndex(int cnt, DataTable table)
         {
-            F_Control.DataTableForGrid = new DataTable();
+            if (table == null) table = new DataTable();
+
             for (int i = 1; i <= cnt; i++)
             {
-                F_Control.DataTableForGrid.Columns.Add(i.ToString());
+                table.Columns.Add(i.ToString());
             }
         }
 
@@ -124,41 +123,51 @@ namespace csvManager
         /// <summary>
         /// グリッドのすべてのデータを作成
         /// </summary>
-        /// <param name="dataGridView"></param>
-        private void MakeAllData(DataGridView dataGridView)
+        private CSVAllData GetAllData(DataTable table)
         {
-            if (F_Control.DataTableForGrid != null)
+            var csvData = new CSVAllData();
+
+            if (table != null)
             {
-                F_Control.CSVAllData = new CSVAllData();
-                foreach (DataRow row in F_Control.DataTableForGrid.Rows)
+                foreach (DataRow row in table.Rows)
                 {
-                    F_Control.CSVAllData.Add(this.MakeCSVColumnData(row));
+                    csvData.Add(this.GetCSVColumnData(row, table));
                 }
             }
+            return csvData;
         }
         /// <summary>
         /// </summary>
         /// 1行分のグリッドに入っている文字列を取得し、CSVColumnDataオブジェクト作成
         /// <returns></returns>
-        private CSVColumnData MakeCSVColumnData(DataRow row)
+        private CSVColumnData GetCSVColumnData(DataRow row, DataTable table)
         {
-            CSVColumnData csvData = new CSVColumnData();
+            CSVColumnData csvColData = new CSVColumnData();
             //columnには列インデックスが入っている
-            foreach (DataColumn column in F_Control.DataTableForGrid.Columns)
+            foreach (DataColumn column in table.Columns)
             {
                 string cellVal = row[column] == null ? string.Empty : row[column].ToString();
-                csvData.Add(cellVal);
+                csvColData.Add(cellVal);
             }
-            return csvData;
+            return csvColData;
         }
 
         //CellLeaveイベント....セルを移動しただけで走る
         //CellEndEditイベント..編集中でなくなったら入力操作がなくても走る
-        //以下のイベント.......編集中でなくなったら入力操作があった場合走る
+        //以下のイベント.......入力操作があったら走る
         private void dataGridView1_CellParsing(object sender, DataGridViewCellParsingEventArgs e)
         {
-            F_Control.RecodeGridData(sender);
         }
         #endregion
+
+        //CellEndEditイベント..編集中でなくなったら入力操作がなくても走る
+        private void dataGridView1_CellEndEdit(object sender, DataGridViewCellEventArgs e)
+        {
+            if (sender is DataGridView)
+            {
+                var gridView = sender as DataGridView;
+                F_Control.SetViewMemento(gridView);
+            }
+        }
     }
 }

@@ -46,8 +46,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="UndoCommand\Command.cs" />
+    <Compile Include="UndoCommand\StateCommand.cs" />
+    <Compile Include="UndoCommand\ViewCommand.cs" />
     <Compile Include="Control\Control.cs" />
-    <Compile Include="Control\UndoControl.cs" />
     <Compile Include="Model\Model_CSVData.cs" />
     <Compile Include="View\Form1.cs">
       <SubType>Form</SubType>
@@ -69,6 +71,7 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <None Include="Properties\DataSources\CSVAllData.datasource" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

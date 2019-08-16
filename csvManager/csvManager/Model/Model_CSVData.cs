@@ -6,7 +6,7 @@ namespace csvManager
 {
     #region CSV全データクラス
 
-    class CSVAllData : List<CSVColumnData>
+    public class CSVAllData : List<CSVColumnData>
     {
         /// <summary>
         /// すべての行で、一番カラムが多い行のカラム数
@@ -17,8 +17,10 @@ namespace csvManager
     #endregion
 
     #region CSVデータのColumm(縦)用クラス[1行分]
-
-    class CSVColumnData : List<string>
+    /// <summary>
+    /// CSVデータのColumm(縦)用クラス[1行分]
+    /// </summary>
+    public class CSVColumnData : List<string>
     {
         private const char comma = ',';
 

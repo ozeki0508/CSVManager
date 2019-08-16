@@ -4,10 +4,12 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 using System.Data;
+using csvManager.UndoCommand;
+using System.Collections;
 
 namespace csvManager
 {
-    class Control
+    public class Control
     {
         #region 変数・プロパティ・コンストラクタ
 
@@ -15,32 +17,19 @@ namespace csvManager
         /// ファイル名
         /// </summary>
         private string F_FileName;
-        /// <summary>
-        /// 現在グリッドに表示されているDataTable
-        /// </summary>
-        private DataTable CurrentData { get; }
 
         /// <summary>
-        /// データテーブル(GridDataViewと紐付ける)
+        /// 状態保持用
         /// </summary>
-        public DataTable DataTableForGrid { get; set; }
-        /// <summary>
-        /// UndoRedo用記録データプロパティ
-        /// </summary>
-        public RecordedDataTables RecordedData { get; set; }
-        /// <summary>
-        /// CSVデータプロパティ
-        /// </summary>
-        public CSVAllData CSVAllData{ get; set; }
+        private UndoCommand.StateCommand F_StateCommand;        
 
         /// <summary>
         /// コンストラクタ
         /// </summary>
         public Control()
         {
-            this.CSVAllData = new CSVAllData();
-            F_FileName = string.Empty;
-            RecordedData = new RecordedDataTables();
+            this.F_FileName = string.Empty;
+            this.F_StateCommand = new UndoCommand.StateCommand();
         }
         #endregion
 
@@ -163,19 +152,29 @@ namespace csvManager
             {
                 //フォーカスを外して、値を確定
                 gridView.CurrentCell = null;
-                UndoControl.Command.Undo();
+                this.F_StateCommand.Undo();
+                if (this.F_StateCommand.CurrentCommands.Count > 0)
+                {
+                    gridView.DataSource = this.F_StateCommand.CurrentCommands.Peek().F_DataTable;
+                }
             }
         }
 
+        /// <summary>
+        /// Redo処理
+        /// </summary>
+        /// <param name="sender"></param>
         private void Redo(object sender)
         {
-            DataGridView gridView = sender as DataGridView;
-            if (gridView != null)
-            {
-                //フォーカスを外して、値を確定
-                gridView.CurrentCell = null;
-                //UndoControl.Command.Redo();
-            }
+            // 後で
+
+            //DataGridView gridView = sender as DataGridView;
+            //if (gridView != null)
+            //{
+            //    //フォーカスを外して、値を確定
+            //    gridView.CurrentCell = null;
+            //    this.F_StateCommand.Redo();
+            //}
         }
 
         /// <summary>
@@ -186,6 +185,7 @@ namespace csvManager
         {
             if (e.Control)
             {
+                // ボタンを作成すれば、Button.PerformClickができる
                 if (e.KeyCode == Keys.C)
                 {
                     this.Copy(sender);
@@ -202,30 +202,6 @@ namespace csvManager
                 {
                     this.Redo(sender);
                 }
-            }
-        }
-
-        /// <summary>
-        /// 現在のグリッドデータを記録する
-        /// </summary>
-        /// <param name="sender"></param>
-        public void RecodeGridData(object sender)
-        {
-            DataGridView gridView = sender as DataGridView;
-            if (gridView != null)
-            {
-                //記録する(Action..最新DataTable更新、Undo..最新データである最後尾を削除)
-                UndoControl.Command.Record(
-                    () => { RecordedData.Add(this.DataTableForGrid);
-                        gridView.DataSource = RecordedData[RecordedData.Count - 1];
-                    },
-                    () => { RecordedData.RemoveAt(RecordedData.Count - 1);
-                        if(RecordedData.Count > 0)
-                        {
-                            gridView.DataSource = RecordedData[RecordedData.Count - 1];
-                        }
-                    });
-                
             }
         }
 
@@ -252,17 +228,20 @@ namespace csvManager
         /// <summary>
         /// ファイルから読み込み
         /// </summary>
-        public void InputFile(string fileName)
+        public CSVAllData InputFile(string fileName)
         {
             this.F_FileName = fileName;
-            this.Read();
+
+            return this.Read();
         }
 
         /// <summary>
         /// ファイル読み込み、実処理
         /// </summary>
-        private void Read()
+        private CSVAllData Read()
         {
+            var csvData = new CSVAllData();
+
             if (IsAccessFile())
             {
                 using (FileStream fs = new FileStream(this.F_FileName, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
@@ -277,29 +256,30 @@ namespace csvManager
 
                         CSVColumnData itemsList = new CSVColumnData();
                         itemsList.MakeListBy(lineStr);
-                        this.CSVAllData.Add(itemsList);  //一行分を追加
+                        csvData.Add(itemsList);  //一行分を追加
 
                         //一番多いカラム数を設定
                         if (maxVal < itemsList.Count) maxVal = itemsList.Count;
                     }
-                    this.CSVAllData.MaxColumnsInAllRows = maxVal;
+                    csvData.MaxColumnsInAllRows = maxVal;
                 }
             }
+            return csvData;
         }
 
         /// <summary>
         /// ファイルへ書き込み
         /// </summary>
         /// <returns>true:成功</returns>
-        public bool OutputFile()
+        public bool OutputFile(CSVAllData csvData)
         {
-            return this.Write();
+            return this.Write(csvData);
         }
         /// <summary>
         /// ファイル書き込み、実処理
         /// </summary>
         /// <returns>true:成功</returns>
-        private bool Write()
+        private bool Write(CSVAllData csvData)
         {
             bool result = false;
             if(IsAccessFile())
@@ -309,7 +289,7 @@ namespace csvManager
                 //using (StreamWriter sw = new StreamWriter(fs, new UTF8Encoding(false)))//BOMなし
                 using (StreamWriter sw = new StreamWriter(fs, Encoding.GetEncoding("Shift_JIS")))
                 {
-                    foreach (CSVColumnData lineData in this.CSVAllData)
+                    foreach (CSVColumnData lineData in csvData)
                     {
                         string oneLine = lineData.MakeLineByThisDatas();
                         sw.WriteLine(oneLine);
@@ -332,6 +312,68 @@ namespace csvManager
             if (this.IsLockFile()) result = false;
 
             return result;
+        }
+
+        ///// <summary>
+        ///// 状態を保持
+        ///// </summary>
+        ///// <param name="table"></param>
+        //public void SetStateCommand(object source,  DataTable table)
+        //{
+        //    if(table != null)
+        //    {
+        //        UndoCommand.Command cmd = new ViewCommand();
+        //        //this.F_StateCommand.Append(cmd);
+        //        this.F_StateCommand.Execute();
+        //    }
+        //}
+
+        ///// <summary>
+        ///// 状態を保持
+        ///// </summary>
+        ///// <param name="table"></param>
+        //public void SetViewMemento(DataTable table)
+        //{
+        //    if (table != null)
+        //    {
+        //        ViewMemento cmd = new ViewMemento();
+        //        cmd.F_DataTable = table;
+        //        this.F_StateCommand.Append(cmd);
+        //    }
+        //}
+
+        /// <summary>
+        /// 状態を保持
+        /// </summary>
+        /// <param name="view"></param>
+        public void SetViewMemento(DataGridView view)
+        {
+            if (view != null)
+            {
+                var dataTbl = new DataTable();
+
+                var columns = view.Columns;
+                foreach(DataGridViewColumn col in columns)
+                {
+                    dataTbl.Columns.Add(col.Name, col.ValueType);
+                }
+
+                var rows = view.Rows;
+                foreach(DataGridViewRow row in rows)
+                {
+                    var list = new List<object>();
+                    foreach(DataGridViewCell cell in row.Cells)
+                    {
+                        list.Add(cell.Value);
+                    }
+                    dataTbl.Rows.Add(list.ToArray());
+                }
+
+                var cmd = new ViewCommand();
+                cmd.F_DataTable = dataTbl;
+
+                this.F_StateCommand.Append(cmd);
+            }
         }
         #endregion
     }
